@@ -23,8 +23,8 @@ class AnimatedNavItem extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        height: 40, // Fixed height to prevent overflow
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        height: 70, // Slightly increased height
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -32,18 +32,18 @@ class AnimatedNavItem extends StatelessWidget {
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              width: 28,
-              height: 28,
+              width: 46, // Slightly larger width
+              height: 46, // Slightly larger height
               decoration: BoxDecoration(
                 color: selected
                     ? primaryColor.withOpacity(0.12)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(13), // Slightly larger radius
               ),
               child: Icon(
                 icon,
                 color: selected ? primaryColor : inactiveColor,
-                size: 16,
+                size: 26, // Slightly larger icon size
               ),
             ),
             // Label with simple color animation - single line only
@@ -54,9 +54,9 @@ class AnimatedNavItem extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: selected ? primaryColor : inactiveColor,
-                fontSize: 9,
+                fontSize: 13, // Slightly increased font size
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                letterSpacing: 0.2,
+                letterSpacing: 0.3,
                 height: 1.0, // Tight line height
               ),
             ),

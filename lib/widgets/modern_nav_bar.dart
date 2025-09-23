@@ -33,8 +33,8 @@ class ModernNavBar extends StatelessWidget {
         ],
       ),
       child: Container(
-        height: 50,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        height: 80, // Slightly increased height
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [

@@ -332,7 +332,7 @@ class _MainScreenState extends State<MainScreen> {
                         // Main Content with padding for navigation
                         Expanded(
                           child: Container(
-                            padding: const EdgeInsets.only(bottom: 80), // Space for floating nav
+                            padding: const EdgeInsets.only(bottom: 100), // Slightly increased space for larger floating nav
                             child: _buildBody(viewModel),
                           ),
                         ),
