@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/ai_service.dart';
+import '../services/road_condition_detector.dart';
 import '../models/user_profile.dart';
 import '../models/advanced_models.dart';
 import 'dashboard_screen.dart';
@@ -13,6 +14,7 @@ class HomeScreen extends StatelessWidget {
   final AlertLevel alertLevel;
   final List<String> recommendations;
   final AIService aiService;
+  final RoadConditionDetector roadConditionDetector;
 
   const HomeScreen({
     super.key,
@@ -23,6 +25,7 @@ class HomeScreen extends StatelessWidget {
     required this.alertLevel,
     required this.recommendations,
     required this.aiService,
+    required this.roadConditionDetector,
   });
 
   @override
@@ -35,6 +38,7 @@ class HomeScreen extends StatelessWidget {
       alertLevel: alertLevel,
       recommendations: recommendations,
       aiService: aiService,
+      roadConditionDetector: roadConditionDetector,
     );
   }
 }

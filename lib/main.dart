@@ -9,6 +9,7 @@ import 'screens/map_screen.dart';
 import 'viewmodels/main_viewmodel.dart';
 import 'viewmodels/map_viewmodel.dart';
 import 'services/ai_service.dart';
+import 'services/road_condition_detector.dart';
 import 'widgets/drivesync_logo.dart';
 import 'widgets/modern_nav_bar.dart';
 
@@ -89,12 +90,22 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  late RoadConditionDetector _roadConditionDetector;
+
   @override
   void initState() {
     super.initState();
+    _roadConditionDetector = RoadConditionDetector();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<MainViewModel>(context, listen: false).initialize();
+      _roadConditionDetector.initialize(); // Initialize road condition detection
     });
+  }
+
+  @override
+  void dispose() {
+    _roadConditionDetector.dispose();
+    super.dispose();
   }
 
   Widget _buildBody(MainViewModel viewModel) {
@@ -108,6 +119,7 @@ class _MainScreenState extends State<MainScreen> {
           alertLevel: viewModel.currentAlertLevel,
           recommendations: viewModel.currentRecommendations,
           aiService: viewModel.aiService,
+          roadConditionDetector: _roadConditionDetector,
         );
       case 1:
         return const MapScreen();
@@ -125,6 +137,7 @@ class _MainScreenState extends State<MainScreen> {
           alertLevel: viewModel.currentAlertLevel,
           recommendations: viewModel.currentRecommendations,
           aiService: viewModel.aiService,
+          roadConditionDetector: _roadConditionDetector,
         );
     }
   }

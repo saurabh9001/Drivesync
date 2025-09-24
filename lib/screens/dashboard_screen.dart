@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../models/advanced_models.dart';
 import '../services/ai_service.dart';
+import '../services/road_condition_detector.dart';
 import '../widgets/dashboard/risk_analysis_card.dart';
 import '../widgets/dashboard/action_button.dart';
+import '../widgets/road_condition_card.dart';
 import '../utils/weather_colors.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -14,6 +16,7 @@ class DashboardScreen extends StatelessWidget {
   final AlertLevel alertLevel;
   final List<String> recommendations;
   final AIService aiService;
+  final RoadConditionDetector roadConditionDetector;
 
   const DashboardScreen({
     super.key,
@@ -24,6 +27,7 @@ class DashboardScreen extends StatelessWidget {
     required this.alertLevel,
     required this.recommendations,
     required this.aiService,
+    required this.roadConditionDetector,
   });
 
   Color _getRiskColor() {
@@ -113,42 +117,6 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
-
-            // Welcome Message
-            if (userProfile != null) ...[
-              Text(
-                'Hello, ${userProfile!.name.split(' ').first}!',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'AI is keeping you safe on the roads',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF717182),
-                ),
-              ),
-            ] else ...[
-              const Text(
-                'Welcome to SafeRoute AI',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Advanced AI-powered road safety system',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF717182),
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
 
             // Enhanced Risk Score Card with AI Analysis
             Container(
@@ -293,6 +261,11 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ),
             ),
+
+            const SizedBox(height: 24),
+
+            // Road Condition Detection Card
+            RoadConditionCard(detector: roadConditionDetector),
 
             const SizedBox(height: 24),
 
