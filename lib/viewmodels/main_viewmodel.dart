@@ -56,6 +56,15 @@ class MainViewModel extends ChangeNotifier {
     await _loadUserProfile();
     _initializeAI();
     _loadDemoData();
+    
+    // Start with real sensors enabled and tracking active
+    _isLocationTracking = true;
+    if (_aiService.useRealSensors) {
+      await _aiService.startRealSensorMonitoring();
+    } else {
+      _aiService.startSensorSimulation();
+    }
+    notifyListeners();
   }
 
   void _loadDemoData() {
@@ -131,8 +140,14 @@ class MainViewModel extends ChangeNotifier {
     _isLocationTracking = !_isLocationTracking;
     
     if (_isLocationTracking) {
-      _aiService.startSensorSimulation();
+      // Start real sensor monitoring by default, fallback to simulation if needed
+      if (_aiService.useRealSensors) {
+        _aiService.startRealSensorMonitoring();
+      } else {
+        _aiService.startSensorSimulation();
+      }
     } else {
+      _aiService.stopRealSensorMonitoring();
       _aiService.stopSensorSimulation();
     }
     

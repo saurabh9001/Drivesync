@@ -94,7 +94,7 @@ class RoadConditionDetector extends ChangeNotifier {
       _startWebSimulation();
     } else {
       try {
-        _accelerometerSubscription = accelerometerEvents.listen(
+        _accelerometerSubscription = accelerometerEventStream().listen(
           (AccelerometerEvent event) {
             _processAccelerometerData(event);
           },

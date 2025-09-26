@@ -3,9 +3,13 @@ import '../models/user_profile.dart';
 import '../models/advanced_models.dart';
 import '../services/ai_service.dart';
 import '../services/road_condition_detector.dart';
+import '../services/multi_sensor_accident_detector.dart';
 import '../widgets/dashboard/risk_analysis_card.dart';
+import '../widgets/dashboard/enhanced_risk_analysis_card.dart';
+import '../widgets/dashboard/live_sensor_data_card.dart';
 import '../widgets/dashboard/action_button.dart';
 import '../widgets/road_condition_card.dart';
+import '../widgets/multi_sensor_dashboard.dart';
 import '../utils/weather_colors.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -17,6 +21,7 @@ class DashboardScreen extends StatelessWidget {
   final List<String> recommendations;
   final AIService aiService;
   final RoadConditionDetector roadConditionDetector;
+  final MultiSensorAccidentDetector? multiSensorDetector;
 
   const DashboardScreen({
     super.key,
@@ -28,6 +33,7 @@ class DashboardScreen extends StatelessWidget {
     required this.recommendations,
     required this.aiService,
     required this.roadConditionDetector,
+    this.multiSensorDetector,
   });
 
   Color _getRiskColor() {
@@ -118,154 +124,30 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 16),
             ],
 
-            // Enhanced Risk Score Card with AI Analysis
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white,
-                    Color.fromRGBO(
-                      _getRiskColor().red,
-                      _getRiskColor().green,
-                      _getRiskColor().blue,
-                      0.05,
-                    ),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Color.fromRGBO(
-                    _getRiskColor().red,
-                    _getRiskColor().green,
-                    _getRiskColor().blue,
-                    0.2,
-                  ),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color.fromRGBO(
-                      _getRiskColor().red,
-                      _getRiskColor().green,
-                      _getRiskColor().blue,
-                      0.1,
-                    ),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'AI Risk Analysis',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'LIVE',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Risk Score Circle with Animation
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 140,
-                        height: 140,
-                        child: CircularProgressIndicator(
-                          value: riskScore / 10.0,
-                          strokeWidth: 8,
-                          backgroundColor: Colors.grey.shade200,
-                          valueColor: AlwaysStoppedAnimation<Color>(_getRiskColor()),
-                        ),
-                      ),
-                      Column(
-                        children: [
-                          Text(
-                            riskScore.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: _getRiskColor(),
-                            ),
-                          ),
-                          Text(
-                            '/10',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Color.fromRGBO(
-                        _getRiskColor().red,
-                    _getRiskColor().green,
-                    _getRiskColor().blue,
-                    0.1,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _getRiskLevel(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _getRiskColor(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _getRiskMessage(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF717182),
-                    ),
-                  ),
-                ],
-              ),
+            // Enhanced Risk Score Card with Live Sensor Data
+            EnhancedRiskAnalysisCard(
+              riskScore: riskScore,
+              riskLevel: _getRiskLevel(),
+              riskMessage: _getRiskMessage(),
+              riskColor: _getRiskColor(),
+              aiService: aiService,
             ),
 
             const SizedBox(height: 24),
 
+            // Live Sensor Data Card
+            LiveSensorDataCard(aiService: aiService),
+
+            const SizedBox(height: 16),
+
             // Road Condition Detection Card
             RoadConditionCard(detector: roadConditionDetector),
+
+            const SizedBox(height: 16),
+
+            // Multi-Sensor Accident Detection Dashboard
+            if (multiSensorDetector != null)
+              const MultiSensorDashboard(),
 
             const SizedBox(height: 24),
 

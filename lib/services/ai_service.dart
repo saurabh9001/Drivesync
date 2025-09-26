@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/advanced_models.dart';
 import '../models/user_profile.dart';
 import '../data/demo_data.dart';
@@ -47,7 +49,29 @@ class AIService {
     _currentWeather = DemoData.getCurrentWeather();
   }
 
+  // Real sensor data integration
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
+  StreamSubscription<Position>? _locationSubscription;
+  
+  // Multi-sensor integration flag
+  bool _useRealSensors = true;
+  bool get useRealSensors => _useRealSensors;
+  
+  void setUseRealSensors(bool useReal) {
+    _useRealSensors = useReal;
+    if (_useRealSensors) {
+      stopSensorSimulation();
+      startRealSensorMonitoring();
+    } else {
+      stopRealSensorMonitoring();
+      startSensorSimulation();
+    }
+  }
+
   void startSensorSimulation() {
+    if (_useRealSensors) return; // Don't simulate if using real sensors
+    
     _sensorTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       _simulateSensorData();
     });
@@ -56,6 +80,105 @@ class AIService {
   void stopSensorSimulation() {
     _sensorTimer?.cancel();
     _sensorTimer = null;
+  }
+
+  // Start real sensor monitoring
+  Future<void> startRealSensorMonitoring() async {
+    if (!_useRealSensors) return;
+    
+    try {
+      // Start accelerometer monitoring
+      _accelerometerSubscription = accelerometerEventStream().listen((event) {
+        _processRealAccelerometerData(event);
+      });
+
+      // Start gyroscope monitoring
+      _gyroscopeSubscription = gyroscopeEventStream().listen((event) {
+        _processRealGyroscopeData(event);
+      });
+
+      // Start GPS monitoring
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      
+      if (permission == LocationPermission.whileInUse || 
+          permission == LocationPermission.always) {
+        _locationSubscription = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 1,
+          ),
+        ).listen((position) {
+          _processRealLocationData(position);
+        });
+      }
+    } catch (e) {
+      print('Error starting real sensors: $e');
+      // Fallback to simulation if real sensors fail
+      _useRealSensors = false;
+      startSensorSimulation();
+    }
+  }
+
+  void stopRealSensorMonitoring() {
+    _accelerometerSubscription?.cancel();
+    _gyroscopeSubscription?.cancel();
+    _locationSubscription?.cancel();
+  }
+
+  // Real sensor data processing
+  double _lastAcceleration = 0.0;
+  double _lastGyroX = 0.0;
+  double _lastGyroY = 0.0;
+  double _lastGyroZ = 0.0;
+  Position? _lastPosition;
+
+  void _processRealAccelerometerData(AccelerometerEvent event) {
+    // Calculate G-force acceleration
+    _lastAcceleration = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z - 9.8, 2));
+    _updateSensorDataFromRealSensors();
+  }
+
+  void _processRealGyroscopeData(GyroscopeEvent event) {
+    _lastGyroX = event.x;
+    _lastGyroY = event.y;
+    _lastGyroZ = event.z;
+    _updateSensorDataFromRealSensors();
+  }
+
+  void _processRealLocationData(Position position) {
+    _lastPosition = position;
+    _currentLat = position.latitude;
+    _currentLng = position.longitude;
+    _currentSpeed = position.speed * 3.6; // Convert m/s to km/h
+    _currentDirection = position.heading;
+    _updateSensorDataFromRealSensors();
+  }
+
+  void _updateSensorDataFromRealSensors() {
+    if (_lastPosition == null) return; // Wait for GPS data
+    
+    final sensorData = SensorData(
+      latitude: _currentLat,
+      longitude: _currentLng,
+      speed: _currentSpeed,
+      direction: _currentDirection,
+      acceleration: _lastAcceleration,
+      gyroscopeX: _lastGyroX,
+      gyroscopeY: _lastGyroY,
+      gyroscopeZ: _lastGyroZ,
+      timestamp: DateTime.now(),
+    );
+
+    // Keep only last 50 readings
+    _sensorHistory.add(sensorData);
+    if (_sensorHistory.length > 50) {
+      _sensorHistory.removeAt(0);
+    }
+
+    _sensorController.add(sensorData);
   }
 
   void _simulateSensorData() {
@@ -217,11 +340,7 @@ class AIService {
     print('Time: ${DateTime.now()}');
   }
 
-  // Cleanup
-  void dispose() {
-    _sensorTimer?.cancel();
-    _sensorController.close();
-  }
+
 
   // Helper methods
   double _calculateDistance(double lat1, double lng1, double lat2, double lng2) {
@@ -273,5 +392,13 @@ class AIService {
 
   UserProfile _getDefaultProfile() {
     return DemoData.getDefaultUserProfile();
+  }
+
+  // Cleanup method
+  void dispose() {
+    _sensorTimer?.cancel();
+    stopSensorSimulation();
+    stopRealSensorMonitoring();
+    _sensorController.close();
   }
 }
