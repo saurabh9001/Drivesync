@@ -134,16 +134,16 @@ class _LiveSensorDataCardState extends State<LiveSensorDataCard>
               ],
             ),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             
             // Sensor data in a 2x3 grid
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              childAspectRatio: 2.5,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
+              crossAxisCount: 3,
+              childAspectRatio: 1.8,
+              mainAxisSpacing: 3,
+              crossAxisSpacing: 3,
               children: [
                 _buildSensorTile(
                   icon: Icons.speed,
@@ -184,14 +184,14 @@ class _LiveSensorDataCardState extends State<LiveSensorDataCard>
               ],
             ),
             
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             
             // Last update timestamp
             Center(
               child: Text(
-                'Last update: ${_formatTimestamp(_currentSensorData!.timestamp)}',
+                'Updated: ${_formatTimestamp(_currentSensorData!.timestamp)}',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 9,
                   color: Colors.grey.shade600,
                 ),
               ),
@@ -209,40 +209,37 @@ class _LiveSensorDataCardState extends State<LiveSensorDataCard>
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: color,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
+          Icon(icon, color: color, size: 12),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 8,
+              color: color,
+              fontWeight: FontWeight.w500,
             ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 1),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 8,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

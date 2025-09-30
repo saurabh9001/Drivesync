@@ -147,10 +147,7 @@ class _EnhancedRiskAnalysisCardState extends State<EnhancedRiskAnalysisCard>
             ),
           ),
           
-          const SizedBox(height: 16),
-          
-          // Live sensor data grid
-          if (_currentSensorData != null) _buildLiveSensorDataGrid(),
+
         ],
       ),
     );
@@ -293,95 +290,7 @@ class _EnhancedRiskAnalysisCardState extends State<EnhancedRiskAnalysisCard>
     );
   }
 
-  Widget _buildLiveSensorDataGrid() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.sensors, size: 16, color: Colors.grey.shade600),
-              const SizedBox(width: 4),
-              Text(
-                'Live Sensor Data',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            childAspectRatio: 1.8,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            children: [
-              _buildSensorTile(
-                'Speed',
-                '${_currentSensorData!.speed.toStringAsFixed(1)} km/h',
-                Icons.speed,
-                Colors.blue,
-              ),
-              _buildSensorTile(
-                'G-Force',
-                '${_currentSensorData!.acceleration.toStringAsFixed(2)}G',
-                Icons.flash_on,
-                Colors.orange,
-              ),
-              _buildSensorTile(
-                'Gyro',
-                '${sqrt(pow(_currentSensorData!.gyroscopeX, 2) + pow(_currentSensorData!.gyroscopeY, 2) + pow(_currentSensorData!.gyroscopeZ, 2)).toStringAsFixed(1)}°/s',
-                Icons.rotate_right,
-                Colors.green,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildSensorTile(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 9,
-              color: color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
+
 }
