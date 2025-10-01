@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
-import 'screens/home_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/profile_screen.dart';
-import 'screens/reporting_screen.dart';
 import 'screens/map_screen.dart';
 import 'viewmodels/main_viewmodel.dart';
 import 'viewmodels/map_viewmodel.dart';
 import 'services/ai_service.dart';
 import 'services/road_condition_detector.dart';
+import 'services/emergency_sos_service.dart';
+import 'providers/main_app_provider.dart';
 import 'widgets/drivesync_logo.dart';
 import 'widgets/modern_nav_bar.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Emergency SOS Service
+  await EmergencySOSService().initialize();
   
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -34,14 +37,15 @@ class SafeWayApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => MainViewModel()),
-        ChangeNotifierProvider(create: (_) => MapViewModel(AIService())),
-      ],
-      child: MaterialApp(
-        title: 'DriveSync',
-        theme: ThemeData(
+    return MainAppProvider(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => MainViewModel()),
+          ChangeNotifierProvider(create: (_) => MapViewModel(AIService())),
+        ],
+        child: MaterialApp(
+          title: 'DriveSync',
+          theme: ThemeData(
           primarySwatch: Colors.blue,
           scaffoldBackgroundColor: Colors.white,
           fontFamily: 'Inter',
@@ -77,6 +81,7 @@ class SafeWayApp extends StatelessWidget {
         ),
         home: const MainScreen(),
         debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }

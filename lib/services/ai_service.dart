@@ -6,7 +6,9 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/advanced_models.dart';
 import '../models/user_profile.dart';
+import '../models/emergency_location_data.dart';
 import '../data/demo_data.dart';
+import 'emergency_sos_service.dart';
 
 class AIService {
   static final AIService _instance = AIService._internal();
@@ -19,6 +21,10 @@ class AIService {
   Timer? _sensorTimer;
   final List<SensorData> _sensorHistory = [];
   final StreamController<SensorData> _sensorController = StreamController.broadcast();
+  static const Duration _sensorBroadcastInterval = Duration(milliseconds: 300);
+  DateTime? _lastSensorBroadcast;
+  Timer? _sensorBroadcastTimer;
+  SensorData? _pendingSensorData;
   
   // Weather data
   WeatherData _currentWeather = WeatherData(
@@ -136,8 +142,9 @@ class AIService {
   Position? _lastPosition;
 
   void _processRealAccelerometerData(AccelerometerEvent event) {
-    // Calculate G-force acceleration
-    _lastAcceleration = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z - 9.8, 2));
+    // Calculate total G-force magnitude, then subtract gravity
+    double totalMagnitude = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2));
+    _lastAcceleration = (totalMagnitude - 9.8).abs(); // Net acceleration excluding gravity
     _updateSensorDataFromRealSensors();
   }
 
@@ -178,7 +185,7 @@ class AIService {
       _sensorHistory.removeAt(0);
     }
 
-    _sensorController.add(sensorData);
+    _queueSensorData(sensorData);
   }
 
   void _simulateSensorData() {
@@ -218,16 +225,42 @@ class AIService {
       _sensorHistory.removeAt(0);
     }
 
-    _sensorController.add(sensorData);
+    _queueSensorData(sensorData);
   }
 
-  // Advanced risk calculation
+  void _queueSensorData(SensorData sensorData) {
+    final now = DateTime.now();
+    _pendingSensorData = sensorData;
+
+    if (_lastSensorBroadcast == null ||
+        now.difference(_lastSensorBroadcast!) >= _sensorBroadcastInterval) {
+      _emitSensorData(sensorData);
+      return;
+    }
+
+    final remaining =
+        _sensorBroadcastInterval - now.difference(_lastSensorBroadcast!);
+    _sensorBroadcastTimer?.cancel();
+    _sensorBroadcastTimer = Timer(remaining, () {
+      if (_pendingSensorData != null) {
+        _emitSensorData(_pendingSensorData!);
+        _pendingSensorData = null;
+      }
+    });
+  }
+
+  void _emitSensorData(SensorData data) {
+    _sensorController.add(data);
+    _lastSensorBroadcast = DateTime.now();
+  }
+
+  // Advanced risk calculation with emergency SOS trigger
   double calculateAdvancedRiskScore(UserProfile? userProfile) {
     if (_sensorHistory.isEmpty) return 0.0;
 
     final currentData = _sensorHistory.last;
     
-    return AIProcessingEngine.calculateDynamicRiskScore(
+    final riskScore = AIProcessingEngine.calculateDynamicRiskScore(
       currentData,
       _sensorHistory,
       _blackspots,
@@ -235,6 +268,43 @@ class AIService {
       userProfile ?? _getDefaultProfile(),
       DateTime.now(),
     );
+
+    // Check for emergency conditions (high risk score >= 8.0)
+    if (riskScore >= 8.0) {
+      _checkAndTriggerEmergency(riskScore);
+    }
+
+    return riskScore;
+  }
+
+  DateTime? _lastEmergencyTrigger;
+  bool _emergencyTriggered = false;
+
+  // Check and trigger emergency with cooldown to prevent spam
+  void _checkAndTriggerEmergency(double riskScore) {
+    final now = DateTime.now();
+    
+    // Prevent multiple triggers within 5 minutes
+    if (_lastEmergencyTrigger != null && 
+        now.difference(_lastEmergencyTrigger!).inMinutes < 5) {
+      return;
+    }
+
+    // Only trigger if risk is very high (9.0+) or sustained high risk
+    if (riskScore >= 9.0 || (_emergencyTriggered == false && riskScore >= 8.5)) {
+      _lastEmergencyTrigger = now;
+      _emergencyTriggered = true;
+      
+      // Trigger emergency in background
+      triggerEmergencyAlert().catchError((error) {
+        print('Error triggering emergency alert: $error');
+      });
+
+      // Reset emergency flag after 10 minutes
+      Timer(const Duration(minutes: 10), () {
+        _emergencyTriggered = false;
+      });
+    }
   }
 
   // Get alert level
@@ -332,12 +402,42 @@ class AIService {
     return LatLng(current.latitude, current.longitude);
   }
 
-  // Emergency alert
-  void triggerEmergencyAlert() {
-    // This would integrate with emergency services in a real app
+  // Emergency alert - now integrated with SOS
+  Future<void> triggerEmergencyAlert() async {
     print('🚨 EMERGENCY ALERT TRIGGERED 🚨');
     print('Location: ${_currentLat}, ${_currentLng}');
     print('Time: ${DateTime.now()}');
+    
+    final sosService = EmergencySOSService();
+    
+    // Check if SOS is enabled and auto-trigger is enabled
+    if (sosService.sosEnabled && sosService.autoTriggerEnabled) {
+      try {
+        // Create emergency location data
+        final emergencyLocation = EmergencyLocationData(
+          latitude: _currentLat,
+          longitude: _currentLng,
+          address: 'Accident detected by SafeRoute AI',
+          timestamp: DateTime.now(),
+        );
+
+        // Trigger emergency SOS
+        final success = await sosService.triggerEmergencySOS(
+          userLocation: emergencyLocation,
+          customMessage: '🚨 EMERGENCY ALERT: Accident detected by SafeRoute AI! I need immediate help. Current location: ${emergencyLocation.googleMapsUrl}',
+        );
+
+        if (success) {
+          print('✅ Emergency SOS triggered successfully');
+        } else {
+          print('⚠️ Emergency SOS failed to trigger');
+        }
+      } catch (e) {
+        print('❌ Error triggering emergency SOS: $e');
+      }
+    } else {
+      print('⚠️ Emergency SOS not enabled or auto-trigger disabled');
+    }
   }
 
 
@@ -397,6 +497,7 @@ class AIService {
   // Cleanup method
   void dispose() {
     _sensorTimer?.cancel();
+    _sensorBroadcastTimer?.cancel();
     stopSensorSimulation();
     stopRealSensorMonitoring();
     _sensorController.close();

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_profile.dart';
+import '../models/emergency_contact.dart';
+import '../models/emergency_location_data.dart';
 import '../services/ai_service.dart';
+import '../services/emergency_sos_service.dart';
+import '../widgets/emergency_contact_widgets.dart';
 import 'reporting_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -22,6 +26,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late TabController _tabController;
   final _formKey = GlobalKey<FormState>();
   final AIService _aiService = AIService();
+  final EmergencySOSService _sosService = EmergencySOSService();
   
   // Profile fields
   final _emergencyContactController = TextEditingController();
@@ -43,6 +48,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   String _language = 'English';
   String _units = 'Metric';
   String _theme = 'Light';
+
+  // Emergency SOS Settings
+  bool _sosEnabled = false;
+  bool _autoTriggerEnabled = true;
+  double _gForceThreshold = 28.0; // Default 28G threshold (4X original)
+  List<EmergencyContact> _emergencyContacts = [];
 
   final List<String> _experienceOptions = [
     'beginner',
@@ -74,6 +85,35 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       _loadExistingProfile();
     }
     _loadSettings();
+    _initializeSOS();
+  }
+
+  Future<void> _initializeSOS() async {
+    try {
+      print('🔧 Initializing SOS service...');
+      await _sosService.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _sosEnabled = _sosService.sosEnabled;
+          _autoTriggerEnabled = _sosService.autoTriggerEnabled;
+          _emergencyContacts = _sosService.emergencyContacts;
+        });
+        
+        print('✅ SOS initialized - Enabled: $_sosEnabled, Auto-trigger: $_autoTriggerEnabled, Contacts: ${_emergencyContacts.length}');
+      }
+    } catch (e) {
+      print('❌ Error initializing SOS: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing Emergency SOS: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -103,6 +143,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       _dataCollection = prefs.getBool('data_collection') ?? true;
       _shareUsageData = prefs.getBool('share_usage_data') ?? false;
       _alertFrequency = prefs.getDouble('alert_frequency') ?? 5.0;
+      _gForceThreshold = prefs.getDouble('g_force_threshold') ?? 28.0;
+      _sosEnabled = prefs.getBool('sos_enabled') ?? false; // Load SOS state
       _language = prefs.getString('language') ?? 'English';
       _units = prefs.getString('units') ?? 'Metric';
       _theme = prefs.getString('theme') ?? 'Light';
@@ -146,6 +188,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     await prefs.setBool('data_collection', _dataCollection);
     await prefs.setBool('share_usage_data', _shareUsageData);
     await prefs.setDouble('alert_frequency', _alertFrequency);
+    await prefs.setDouble('g_force_threshold', _gForceThreshold);
+    await prefs.setBool('sos_enabled', _sosEnabled); // Save SOS state
     await prefs.setString('language', _language);
     await prefs.setString('units', _units);
     await prefs.setString('theme', _theme);
@@ -469,6 +513,89 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
           const SizedBox(height: 24),
 
+          // Emergency SOS Settings
+          _buildSectionHeader('Emergency SOS'),
+          const SizedBox(height: 16),
+          _buildCard([
+            _buildSwitchTile(
+              title: 'Enable Emergency SOS',
+              subtitle: 'Allow emergency alerts to contacts',
+              value: _sosEnabled,
+              onChanged: (value) async {
+                try {
+                  setState(() => _sosEnabled = value);
+                  await _sosService.setSosEnabled(value);
+                  
+                  // CRITICAL: Save to SharedPreferences for detector services
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('sos_enabled', value);
+                  
+                  // Force refresh state from service
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  if (mounted) {
+                    setState(() {
+                      _sosEnabled = _sosService.sosEnabled;
+                    });
+                  }
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          value ? 'Emergency SOS enabled' : 'Emergency SOS disabled',
+                        ),
+                        backgroundColor: value ? Colors.green : Colors.orange,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print('Error toggling SOS: $e');
+                  // Revert state on error
+                  if (mounted) {
+                    setState(() => _sosEnabled = !value);
+                  }
+                }
+              },
+            ),
+            const Divider(),
+            _buildSwitchTile(
+              title: 'Auto-Trigger on Accident',
+              subtitle: 'Automatically send alerts when accident detected',
+              value: _autoTriggerEnabled,
+              onChanged: _sosEnabled
+                  ? (value) async {
+                      setState(() => _autoTriggerEnabled = value);
+                      await _sosService.setAutoTriggerEnabled(value);
+                    }
+                  : null,
+            ),
+            const Divider(),
+            _buildGForceSlider(),
+            const Divider(),
+            _buildEmergencyContactsSection(),
+            if (_sosEnabled && _emergencyContacts.isNotEmpty) ...[
+              const Divider(),
+              _buildActionTile(
+                title: 'Test Emergency SOS',
+                subtitle: 'Send test message to contacts',
+                icon: Icons.bug_report,
+                color: Colors.orange,
+                onTap: () => _testEmergencySOS(),
+              ),
+              const Divider(),
+              _buildActionTile(
+                title: 'Simulate Accident',
+                subtitle: 'Trigger accident detection manually',
+                icon: Icons.warning,
+                color: Colors.red,
+                onTap: () => _simulateAccident(),
+              ),
+            ],
+          ]),
+
+          const SizedBox(height: 24),
+
           // Location & Privacy Settings
           _buildSectionHeader('Location & Privacy'),
           const SizedBox(height: 16),
@@ -604,6 +731,324 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         ],
       ),
     );
+  }
+
+  // Emergency SOS Helper Methods
+  void _showAllContactsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Emergency Contacts'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: Column(
+            children: [
+              // Add Contact Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _addEmergencyContact(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Contact'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Contacts List
+              Expanded(
+                child: _emergencyContacts.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.contact_emergency,
+                              size: 64,
+                              color: Color(0xFF717182),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'No emergency contacts added',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Color(0xFF717182),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Add contacts to enable SOS alerts',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF717182),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _emergencyContacts.length,
+                        itemBuilder: (context, index) {
+                          final contact = _emergencyContacts[index];
+                          return EmergencyContactCard(
+                            contact: contact,
+                            onEdit: () => _editEmergencyContact(contact),
+                            onDelete: () => _deleteEmergencyContact(contact.id),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addEmergencyContact() async {
+    final result = await showDialog<EmergencyContact>(
+      context: context,
+      builder: (context) => const AddEmergencyContactDialog(),
+    );
+    
+    if (result != null) {
+      setState(() {
+        _emergencyContacts = _sosService.emergencyContacts;
+      });
+    }
+  }
+
+  void _editEmergencyContact(EmergencyContact contact) async {
+    final result = await showDialog<EmergencyContact>(
+      context: context,
+      builder: (context) => AddEmergencyContactDialog(existingContact: contact),
+    );
+    
+    if (result != null) {
+      setState(() {
+        _emergencyContacts = _sosService.emergencyContacts;
+      });
+    }
+  }
+
+  void _deleteEmergencyContact(String contactId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Contact'),
+        content: const Text('Are you sure you want to delete this emergency contact?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _sosService.removeEmergencyContact(contactId);
+      setState(() {
+        _emergencyContacts = _sosService.emergencyContacts;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Emergency contact deleted'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
+  void _testEmergencySOS() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Test Emergency SOS'),
+        content: const Text(
+          'This will send a test emergency message to all your emergency contacts. '
+          'Make sure to inform them that this is just a test.\n\n'
+          'Continue with test?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Send Test'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Sending test emergency alerts...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Create test location data
+        final testLocation = EmergencyLocationData(
+          latitude: 18.5204,
+          longitude: 73.8567,
+          address: 'Test Location - SafeRoute AI',
+        );
+
+        final success = await _sosService.triggerEmergencySOS(
+          userLocation: testLocation,
+          customMessage: 'TEST ALERT: This is a test emergency message from SafeRoute AI. Please ignore this message.',
+        );
+
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                success 
+                  ? 'Test emergency alerts sent successfully!'
+                  : 'Some alerts failed to send. Check your permissions.',
+              ),
+              backgroundColor: success ? Colors.green : Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error sending test alerts: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _simulateAccident() async {
+    // Show confirmation dialog first
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Simulate Accident'),
+          ],
+        ),
+        content: const Text(
+          'This will trigger the accident detection system and send emergency alerts to your contacts. Are you sure?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Simulate', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Show loading dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Simulating accident detection...'),
+            ],
+          ),
+        ),
+      );
+
+      try {
+        // Import the main app provider to trigger accident
+        final mainAppProvider = context.findAncestorStateOfType<State>();
+        
+        // Create test location data
+        final emergencyLocation = EmergencyLocationData(
+          latitude: 18.5204,
+          longitude: 73.8567,
+          address: 'Test Accident Location - DriveSync',
+          timestamp: DateTime.now(),
+        );
+
+        // Trigger emergency SOS directly
+        final success = await _sosService.triggerEmergencySOS(
+          userLocation: emergencyLocation,
+          customMessage: 'SIMULATED ACCIDENT! This is a test of the accident detection system. G-force impact detected at ${DateTime.now().toString()}',
+        );
+
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                success 
+                  ? '🚨 Accident simulation complete! Emergency alerts sent.'
+                  : '⚠️ Some emergency alerts failed. Check permissions.',
+              ),
+              backgroundColor: success ? Colors.red : Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Accident simulation failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title) {
@@ -810,6 +1255,256 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+    );
+  }
+
+  Widget _buildEmergencyContactsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Emergency Contacts',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    '${_emergencyContacts.length} contacts configured',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF717182),
+                    ),
+                  ),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _addEmergencyContact(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E40AF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  minimumSize: const Size(0, 32),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_emergencyContacts.isEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Color(0xFF717182),
+                  size: 20,
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Add emergency contacts to enable automatic SOS alerts',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF717182),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...(_emergencyContacts.take(3).map((contact) => Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: const Color(0xFF1E40AF).withOpacity(0.1),
+                  child: Text(
+                    contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E40AF),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        contact.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        contact.phoneNumber,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF717182),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: () => _editEmergencyContact(contact),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      style: IconButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        backgroundColor: Colors.blue.withOpacity(0.1),
+                        minimumSize: const Size(32, 32),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () => _deleteEmergencyContact(contact.id),
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      style: IconButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        backgroundColor: Colors.red.withOpacity(0.1),
+                        minimumSize: const Size(32, 32),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          )).toList()),
+        if (_emergencyContacts.length > 3)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextButton(
+              onPressed: () => _showAllContactsDialog(),
+              child: Text('View all ${_emergencyContacts.length} contacts'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF1E40AF),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildGForceSlider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Emergency G-Force Threshold',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '${_gForceThreshold.toStringAsFixed(1)}G',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E40AF),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _sosEnabled ? 'SOS triggers automatically at ${_gForceThreshold.toStringAsFixed(1)}G impact' : 'Enable SOS to configure threshold',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF717182),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: _sosEnabled ? const Color(0xFF1E40AF) : Colors.grey,
+              inactiveTrackColor: Colors.grey.shade300,
+              trackShape: const RoundedRectSliderTrackShape(),
+              trackHeight: 4.0,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
+              thumbColor: _sosEnabled ? const Color(0xFF1E40AF) : Colors.grey,
+              overlayColor: _sosEnabled ? const Color(0xFF1E40AF).withOpacity(0.2) : Colors.transparent,
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
+              tickMarkShape: const RoundSliderTickMarkShape(),
+              activeTickMarkColor: Colors.white,
+              inactiveTickMarkColor: Colors.grey.shade400,
+              valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
+              valueIndicatorColor: const Color(0xFF1E40AF),
+              valueIndicatorTextStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            child: Slider(
+              value: _gForceThreshold,
+              min: 12.0,
+              max: 60.0,
+              divisions: 96, // 0.5G increments
+              label: '${_gForceThreshold.toStringAsFixed(1)}G',
+              onChanged: _sosEnabled ? (value) {
+                setState(() => _gForceThreshold = value);
+                _saveSettings();
+              } : null,
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '12.0G (Very Sensitive)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              Text(
+                '60.0G (Extreme Impact Only)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

@@ -3,6 +3,11 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/emergency_location_data.dart';
+import 'emergency_sos_service.dart';
 
 enum RoadConditionLevel {
   smooth(1, "Smooth Road", "Road conditions are excellent"),
@@ -19,6 +24,7 @@ class RoadConditionDetector extends ChangeNotifier {
   static const double SMOOTH_THRESHOLD = 1.2; // Level 1: Smooth road
   static const double MODERATE_THRESHOLD = 2.5; // Level 2: Moderate bumps
   static const double ROUGH_THRESHOLD = 4.0; // Level 3: Rough road
+  static const double EMERGENCY_SOS_THRESHOLD = 7.0; // EMERGENCY: Immediate SOS trigger
   
   static const int SAMPLE_WINDOW = 50; // Number of samples to analyze
   static const Duration NOTIFICATION_COOLDOWN = Duration(minutes: 2);
@@ -41,6 +47,10 @@ class RoadConditionDetector extends ChangeNotifier {
   bool _isMonitoring = false;
   bool _isWebPlatform = false;
   Timer? _webSimulationTimer;
+  
+  // Emergency SOS tracking
+  DateTime? _lastEmergencyTrigger;
+  static const Duration _emergencyCooldown = Duration(seconds: 30);
 
   // Getters
   RoadConditionLevel get currentCondition => _currentCondition;
@@ -52,6 +62,18 @@ class RoadConditionDetector extends ChangeNotifier {
     this.onRoadConditionChanged,
     this.onSuggestionGenerated,
   });
+
+  /// Get user-configured G-force threshold from SharedPreferences
+  Future<double> _getUserGForceThreshold() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble('g_force_threshold') ?? 28.0; // Default to 28.0G (4X original)
+  }
+
+  /// Check if SOS is enabled in user settings
+  Future<bool> _isSosEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('sos_enabled') ?? false;
+  }
 
   /// Initialize the road condition detector
   Future<void> initialize() async {
@@ -146,9 +168,27 @@ class RoadConditionDetector extends ChangeNotifier {
   }
 
   /// Process accelerometer data and detect road conditions
-  void _processAccelerometerData(AccelerometerEvent event) {
-    // Calculate magnitude of acceleration (removing gravity)
-    double magnitude = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z - 9.8, 2));
+  void _processAccelerometerData(AccelerometerEvent event) async {
+    // Calculate total magnitude first, then remove gravity
+    double totalMagnitude = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2));
+    double magnitude = (totalMagnitude - 9.8).abs(); // Net acceleration excluding gravity
+    
+    // Check if SOS is enabled before processing
+    final sosEnabled = await _isSosEnabled();
+    if (!sosEnabled) {
+      print('⚠️ Road condition G-Force detected but SOS is DISABLED - ignoring ${magnitude.toStringAsFixed(2)}G');
+      return; // Exit early if SOS is disabled
+    }
+    
+    // Get user-configured threshold
+    final userThreshold = await _getUserGForceThreshold();
+    
+    // EMERGENCY SOS TRIGGER - For extremely high G-force spikes using user threshold
+    if (magnitude > userThreshold) {
+      print('🚨🚨🚨 EMERGENCY G-FORCE DETECTED: ${magnitude.toStringAsFixed(2)}G (User Threshold: ${userThreshold.toStringAsFixed(1)}G)');
+      print('🚨 ROAD CONDITION DETECTOR TRIGGERING IMMEDIATE EMERGENCY SOS - SOS ENABLED ✅');
+      _triggerEmergencySOS(magnitude);
+    }
     
     // Add to sample window
     _accelerationSamples.add(magnitude);
@@ -333,6 +373,64 @@ class RoadConditionDetector extends ChangeNotifier {
     _averageRoughness = 0.0;
     _maxRoughness = 0.0;
     _accelerationSamples.clear();
+  }
+
+  /// Trigger emergency SOS for extremely high G-force (10G+)
+  Future<void> _triggerEmergencySOS(double magnitude) async {
+    // Check cooldown to prevent spam
+    final now = DateTime.now();
+    if (_lastEmergencyTrigger != null &&
+        now.difference(_lastEmergencyTrigger!) < _emergencyCooldown) {
+      print('⏳ Emergency SOS cooldown active — ignoring duplicate trigger.');
+      return;
+    }
+
+    _lastEmergencyTrigger = now;
+    
+    print('🚨 ROAD CONDITION EMERGENCY: ${magnitude.toStringAsFixed(1)}G spike detected!');
+    print('📱 Initiating automatic emergency SOS from road condition detector...');
+
+    try {
+      final sosService = EmergencySOSService();
+      await sosService.setSosEnabled(true);
+      await sosService.setAutoTriggerEnabled(true);
+
+      // Get real GPS location for emergency
+      Position? currentPosition;
+      try {
+        currentPosition = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        ).timeout(const Duration(seconds: 10));
+      } catch (e) {
+        print('⚠️ Failed to get GPS location for emergency: $e');
+      }
+
+      final emergencyLocation = EmergencyLocationData(
+        latitude: currentPosition?.latitude ?? 0.0,
+        longitude: currentPosition?.longitude ?? 0.0,
+        accuracy: currentPosition?.accuracy ?? 0.0,
+        altitude: currentPosition?.altitude ?? 0.0,
+        speed: currentPosition?.speed ?? 0.0,
+        heading: currentPosition?.heading ?? 0.0,
+        address: currentPosition != null 
+            ? 'Lat: ${currentPosition.latitude.toStringAsFixed(5)}, Lng: ${currentPosition.longitude.toStringAsFixed(5)}'
+            : 'GPS location unavailable - Emergency G-force spike detected',
+        timestamp: currentPosition?.timestamp ?? DateTime.now(),
+      );
+
+      final success = await sosService.triggerEmergencySOS(
+        userLocation: emergencyLocation,
+        customMessage: '🚨 EXTREME G-FORCE EMERGENCY! ${magnitude.toStringAsFixed(1)}G impact detected by DriveSync! I need immediate help at ${emergencyLocation.formattedAddress}. GPS Location: ${emergencyLocation.googleMapsUrl}',
+      );
+
+      if (success) {
+        print('✅ Emergency SOS triggered successfully from road condition detector');
+      } else {
+        print('⚠️ Emergency SOS failed from road condition detector');
+      }
+    } catch (e) {
+      print('❌ Error triggering emergency SOS from road condition: $e');
+    }
   }
 
   /// Stop monitoring

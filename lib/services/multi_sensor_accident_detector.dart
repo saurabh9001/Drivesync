@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/emergency_location_data.dart';
 
 enum AccidentSeverity {
   none(0, "Normal Driving", "All systems normal"),
@@ -18,15 +21,15 @@ enum AccidentSeverity {
 }
 
 class MultiSensorAccidentDetector extends ChangeNotifier {
-  // Thresholds for different sensors
-  static const double ACCIDENT_G_THRESHOLD = 10.0; // 10G+ indicates accident
-  static const double SEVERE_G_THRESHOLD = 20.0;   // 20G+ severe accident
+  // Thresholds for different sensors - REALISTIC FOR ACTUAL ACCIDENTS
+  static const double ACCIDENT_G_THRESHOLD = 5.0; // 5G+ indicates accident
+  static const double SEVERE_G_THRESHOLD = 7.0;   // 7G+ severe accident with automatic SOS
   static const double GYRO_THRESHOLD = 300.0;      // 300°/s sudden rotation
   static const double SPEED_CHANGE_THRESHOLD = 30.0; // 30+ km/h sudden change
   
   // Sample windows for analysis
   static const int SENSOR_SAMPLE_WINDOW = 20;
-  static const Duration ACCIDENT_DETECTION_WINDOW = Duration(seconds: 3);
+  static const Duration ACCIDENT_DETECTION_WINDOW = Duration(milliseconds: 500); // Reduced to catch brief spikes
   
   // Sensor subscriptions
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
@@ -43,6 +46,7 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
   AccidentSeverity _currentSeverity = AccidentSeverity.none;
   bool _isMonitoring = false;
   DateTime _lastAccidentCheck = DateTime.now();
+  double _maxGForceDetected = 0.0; // Track highest G-force spike
   
   // Notifications
   final FlutterLocalNotificationsPlugin _notificationsPlugin = 
@@ -51,6 +55,21 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
   // Getters
   AccidentSeverity get currentSeverity => _currentSeverity;
   bool get isMonitoring => _isMonitoring;
+  double get maxGForceDetected => _maxGForceDetected;
+  EmergencyLocationData? get lastEmergencyLocation {
+    if (_locationHistory.isEmpty) return null;
+    final position = _locationHistory.last;
+    return EmergencyLocationData(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      address: null,
+      timestamp: position.timestamp,
+      accuracy: position.accuracy,
+      altitude: position.altitude,
+      speed: position.speed,
+      heading: position.heading,
+    );
+  }
   
   // Callbacks
   Function(AccidentSeverity)? onAccidentDetected;
@@ -60,6 +79,18 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
     this.onAccidentDetected,
     this.onEmergencyAlert,
   });
+
+  /// Get user-configured G-force threshold from SharedPreferences
+  Future<double> _getUserGForceThreshold() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble('g_force_threshold') ?? 28.0; // Default to 28.0G (4X original)
+  }
+
+  /// Check if SOS is enabled in user settings
+  Future<bool> _isSosEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('sos_enabled') ?? false;
+  }
 
   /// Initialize all sensors for accident detection
   Future<void> initialize() async {
@@ -120,10 +151,15 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
     }
   }
 
-  /// Process accelerometer data for crash detection
-  void _processAccelerometerData(AccelerometerEvent event) {
-    // Calculate G-force magnitude
-    double magnitude = sqrt(pow(event.x, 2) + pow(event.y, 2) + pow(event.z - 9.8, 2));
+  /// Process accelerometer data for sudden impacts
+  void _processAccelerometerData(AccelerometerEvent event) async {
+    // Calculate total acceleration magnitude
+    double magnitude = sqrt(
+      pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2)
+    );
+    
+    // Track highest G-force
+    _maxGForceDetected = max(_maxGForceDetected, magnitude);
     
     _accelerometerMagnitudes.add(magnitude);
     
@@ -132,8 +168,25 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
       _accelerometerMagnitudes.removeAt(0);
     }
     
+    // Check if SOS is enabled before processing
+    final sosEnabled = await _isSosEnabled();
+    if (!sosEnabled) {
+      print('⚠️ G-Force detected but SOS is DISABLED - ignoring ${magnitude.toStringAsFixed(2)}G');
+      return; // Exit early if SOS is disabled
+    }
+    
+    // Get user-configured threshold
+    final userThreshold = await _getUserGForceThreshold();
+    
+    // Immediate severe accident detection for high G-force spikes
+    if (magnitude > userThreshold) {
+      print('🚨 G-FORCE SPIKE DETECTED: ${magnitude.toStringAsFixed(2)}G (User Threshold: ${userThreshold.toStringAsFixed(1)}G)');
+      print('🔄 TRIGGERING IMMEDIATE SEVERE ACCIDENT - SOS ENABLED ✅');
+      _triggerImmediateSevereAccident('SEVERE G-FORCE SPIKE: ${magnitude.toStringAsFixed(1)}G');
+    }
     // Check for accident-level G-forces
-    if (magnitude > ACCIDENT_G_THRESHOLD) {
+    else if (magnitude > ACCIDENT_G_THRESHOLD) {
+      print('⚠️ High G-Force: ${magnitude.toStringAsFixed(2)}G (Threshold: ${ACCIDENT_G_THRESHOLD}G)');
       _triggerAccidentAnalysis('High G-Force Detected: ${magnitude.toStringAsFixed(1)}G');
     }
   }
@@ -223,14 +276,42 @@ class MultiSensorAccidentDetector extends ChangeNotifier {
     }
   }
 
+  /// Immediate severe accident detection for high G-force spikes
+  void _triggerImmediateSevereAccident(String trigger) async {
+    print('🚨 IMMEDIATE SEVERE ACCIDENT DETECTED: $trigger');
+    print('🔄 CALLING onAccidentDetected CALLBACK WITH SEVERE SEVERITY');
+    
+    // Force severe accident regardless of cooldown for high G-force spikes
+    _currentSeverity = AccidentSeverity.severe;
+    
+    // Trigger callbacks immediately
+    print('🔄 EXECUTING: onAccidentDetected?.call(AccidentSeverity.severe)');
+    onAccidentDetected?.call(AccidentSeverity.severe);
+    print('✅ CALLBACK EXECUTED - MainAppProvider should now handle severe accident');
+    
+    // Send notifications
+    await _sendAccidentNotification(AccidentSeverity.severe, trigger);
+    
+    // Emergency procedures
+    await _handleSevereAccident();
+    
+    // Update last check to prevent spam
+    _lastAccidentCheck = DateTime.now();
+    
+    notifyListeners();
+  }
+
   /// Multi-sensor fusion to calculate accident severity
   Future<AccidentSeverity> _calculateAccidentSeverity() async {
     double accidentScore = 0.0;
     
+    // Get user-configured threshold
+    final userThreshold = await _getUserGForceThreshold();
+    
     // 1. Accelerometer analysis (40% weight)
     if (_accelerometerMagnitudes.isNotEmpty) {
       double maxG = _accelerometerMagnitudes.reduce(max);
-      if (maxG > SEVERE_G_THRESHOLD) {
+      if (maxG > userThreshold) {
         accidentScore += 4.0; // Severe contribution
       } else if (maxG > ACCIDENT_G_THRESHOLD) {
         accidentScore += 2.0; // Moderate contribution

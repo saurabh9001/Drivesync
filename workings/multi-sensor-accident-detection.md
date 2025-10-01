@@ -10,8 +10,8 @@ DriveSync's Multi-Sensor Accident Detection System combines **4 different sensor
 - **Data**: 3-axis acceleration (X, Y, Z) in m/s²
 - **G-Force Calculation**: `sqrt(pow(x,2) + pow(y,2) + pow(z-9.8,2))`
 - **Thresholds**:
-  - **10G+**: Accident level impact
-  - **20G+**: Severe accident requiring emergency response
+  - **3G+**: Accident level impact (TEST MODE - low for easy testing)
+  - **4G+**: Severe accident requiring emergency response (Calibrated for real-world spikes)
 - **Weight in Algorithm**: 40% (Primary sensor)
 
 ### 2. **Gyroscope** - Rotation Detection
@@ -44,7 +44,7 @@ double accidentScore = 0.0;
 // 1. Accelerometer Analysis (40% weight)
 if (maxG > SEVERE_G_THRESHOLD) {         // 20G+
     accidentScore += 4.0;
-} else if (maxG > ACCIDENT_G_THRESHOLD) { // 10G+
+} else if (maxG > ACCIDENT_G_THRESHOLD) { // 12G+
     accidentScore += 2.0;
 }
 
@@ -235,6 +235,12 @@ ANALYTICS:          Performance monitoring
 - **Barometer**: Altitude changes for cliff/bridge scenarios
 
 ## 📱 **Usage Instructions**
+
+### 🔑 Permission Requirements *(Oct 2025 update)*
+- DriveSync now performs a startup check that requests **SMS**, **Phone Call**, and **Location** permissions automatically using the new `EmergencyPermissionService`.
+- If any permission is permanently denied, the app will log a warning and deep-link to the system settings so testers can enable it manually.
+- Android manifests were updated with `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` so the SOS workflow can grab a precise fix before texting or calling.
+- During accident handling we retry the permission flow before sending alerts, ensuring automatic calls/SMS succeed after you accept the prompts.
 
 ### For Users
 1. **Enable Permissions**: Location, Sensors, Phone, SMS
