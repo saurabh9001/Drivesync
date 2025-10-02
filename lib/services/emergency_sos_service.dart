@@ -150,7 +150,7 @@ class EmergencySOSService {
     }
 
     final message = customMessage ??
-        'EMERGENCY! I need help at: ${location.formattedAddress}. My current location: ${location.googleMapsUrl} - Sent by DriveSync Safety App';
+        '🚨 EMERGENCY! An accident has occurred and I urgently need your help. \n📍 Location: ${location.formattedAddress} \n🌐 Google Maps: ${location.googleMapsUrl} \n- Sent via DriveSync Safety App';
 
     final normalizedNumber = _normalizeNumber(contact.phoneNumber);
     print('[DEBUG] Sending emergency SMS to ${contact.phoneNumber} (normalized: $normalizedNumber)');

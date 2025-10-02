@@ -26,18 +26,19 @@ class EmergencyContactCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            // Contact Type Icon
+            // Contact Icon
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: _getTypeColor().withOpacity(0.1),
+                color: const Color(0xFF1E40AF).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(
-                child: Text(
-                  contact.type.icon,
-                  style: const TextStyle(fontSize: 20),
+              child: const Center(
+                child: Icon(
+                  Icons.person,
+                  size: 24,
+                  color: Color(0xFF1E40AF),
                 ),
               ),
             ),
@@ -62,34 +63,6 @@ class EmergencyContactCard extends StatelessWidget {
                       fontSize: 14,
                       color: Color(0xFF717182),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getTypeColor().withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          contact.type.displayName,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _getTypeColor(),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Priority ${contact.priority}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF717182),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -150,10 +123,6 @@ class _AddEmergencyContactDialogState extends State<AddEmergencyContactDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  
-  ContactType _selectedType = ContactType.family;
-  int _selectedPriority = 1;
 
   @override
   void initState() {
@@ -161,9 +130,6 @@ class _AddEmergencyContactDialogState extends State<AddEmergencyContactDialog> {
     if (widget.existingContact != null) {
       _nameController.text = widget.existingContact!.name;
       _phoneController.text = widget.existingContact!.phoneNumber;
-      _emailController.text = widget.existingContact!.email ?? '';
-      _selectedType = widget.existingContact!.type;
-      _selectedPriority = widget.existingContact!.priority;
     }
   }
 
@@ -171,7 +137,6 @@ class _AddEmergencyContactDialogState extends State<AddEmergencyContactDialog> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 
@@ -181,125 +146,50 @@ class _AddEmergencyContactDialogState extends State<AddEmergencyContactDialog> {
       title: Text(widget.existingContact != null ? 'Edit Contact' : 'Add Emergency Contact'),
       content: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Name Field
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a name';
-                  }
-                  return null;
-                },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Name Field
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Contact Name',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+                hintText: 'Enter full name',
               ),
-              const SizedBox(height: 16),
-              
-              // Phone Field
-              TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                  border: OutlineInputBorder(),
-                  hintText: '+91 98765 43210',
-                ),
-                keyboardType: TextInputType.phone,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a phone number';
-                  }
-                  return null;
-                },
+              textCapitalization: TextCapitalization.words,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a name';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            
+            // Phone Field
+            TextFormField(
+              controller: _phoneController,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined),
+                border: OutlineInputBorder(),
+                hintText: '+91 98765 43210',
               ),
-              const SizedBox(height: 16),
-              
-              // Email Field (Optional)
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email (Optional)',
-                  prefixIcon: Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              
-              // Contact Type Dropdown
-              DropdownButtonFormField<ContactType>(
-                value: _selectedType,
-                decoration: const InputDecoration(
-                  labelText: 'Contact Type',
-                  prefixIcon: Icon(Icons.category_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                items: ContactType.values.map((type) {
-                  return DropdownMenuItem(
-                    value: type,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(type.icon),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            type.displayName,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _selectedType = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              // Priority Slider
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Priority Level: $_selectedPriority',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Lower number = Higher priority (contacted first)',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF717182),
-                    ),
-                  ),
-                  Slider(
-                    value: _selectedPriority.toDouble(),
-                    min: 1.0,
-                    max: 10.0,
-                    divisions: 9,
-                    label: _selectedPriority.toString(),
-                    onChanged: (value) {
-                      setState(() => _selectedPriority = value.toInt());
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter a phone number';
+                }
+                // Basic phone validation
+                if (value.trim().length < 10) {
+                  return 'Phone number must be at least 10 digits';
+                }
+                return null;
+              },
+            ),
+          ],
         ),
       ),
       actions: [
@@ -321,9 +211,9 @@ class _AddEmergencyContactDialogState extends State<AddEmergencyContactDialog> {
         id: widget.existingContact?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         name: _nameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
-        email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
-        type: _selectedType,
-        priority: _selectedPriority,
+        email: null, // No email field needed
+        type: ContactType.family, // Default to family type
+        priority: 1, // Default priority
       );
 
       final sosService = EmergencySOSService();
