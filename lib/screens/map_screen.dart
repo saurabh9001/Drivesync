@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as latlong;
 import 'package:provider/provider.dart';
 import '../models/advanced_models.dart';
 import '../models/location.dart';
@@ -71,27 +71,86 @@ class _MapScreenState extends State<MapScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: FlutterMap(
-          mapController: viewModel.mapController,
-          options: MapOptions(
-            center: DemoData.maharashtraCenter.asLatLng,
-            zoom: 12.0,
-            minZoom: 5.0,
-            maxZoom: 18.0,
-            onTap: (_, __) => _hideBottomSheet(),
-          ),
+        child: Stack(
           children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.safeway_ai',
-            ),
-            if (viewModel.showTraffic)
-              TileLayer(
-                urlTemplate: 'https://tile.thunderforest.com/transport/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.safeway_ai',
+            FlutterMap(
+              mapController: viewModel.mapController,
+              options: MapOptions(
+                center: DemoData.maharashtraCenter.asLatLng,
+                zoom: 12.0,
+                minZoom: 5.0,
+                maxZoom: 18.0,
+                onTap: (tapPosition, point) => _onMapTap(viewModel, point),
               ),
-            MarkerLayer(
-              markers: viewModel.markers,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.safeway_ai',
+                ),
+                if (viewModel.showTraffic)
+                  TileLayer(
+                    urlTemplate: 'https://tile.thunderforest.com/transport/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.safeway_ai',
+                  ),
+                MarkerLayer(
+                  markers: viewModel.markers,
+                ),
+              ],
+            ),
+            
+            // Floating instruction overlay when no destination is set
+            if (viewModel.destinationLocation == null)
+              _buildFloatingMapHint(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingMapHint() {
+    return Positioned(
+      top: 20,
+      left: 20,
+      right: 20,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.touch_app,
+                size: 16,
+                color: Colors.blue.shade600,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Tap anywhere on map to set destination',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade700,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
@@ -104,9 +163,61 @@ class _MapScreenState extends State<MapScreen> {
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
+          // Show instruction banner when no destination is set
+          if (viewModel.destinationLocation == null)
+            _buildInstructionBanner(),
+          
           _buildFilterButtons(viewModel),
           const SizedBox(height: 16),
           _buildMapButtons(viewModel),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade50, Colors.blue.shade100],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200, width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.touch_app,
+            color: Colors.blue.shade600,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Set Your Destination',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+                Text(
+                  'Tap anywhere on the map to set destination & get notified when you\'re 500m away',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -157,26 +268,97 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildMapButtons(MapViewModel viewModel) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
       children: [
-        _buildMapButton(
-          icon: Icons.layers,
-          label: 'Traffic',
-          isActive: viewModel.showTraffic,
-          onPressed: viewModel.toggleTraffic,
-        ),
-        _buildMapButton(
-          icon: Icons.my_location,
-          label: 'My Location',
-          onPressed: viewModel.centerOnCurrentLocation,
-        ),
-        _buildMapButton(
-          icon: _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-          label: _isFullScreen ? 'Exit Fullscreen' : 'Fullscreen',
-          onPressed: () => setState(() => _isFullScreen = !_isFullScreen),
+        // Destination info
+        if (viewModel.destinationLocation != null) 
+          _buildDestinationInfo(viewModel),
+        
+        const SizedBox(height: 8),
+        
+        // Map buttons
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildMapButton(
+              icon: Icons.layers,
+              label: 'Traffic',
+              isActive: viewModel.showTraffic,
+              onPressed: viewModel.toggleTraffic,
+            ),
+            _buildMapButton(
+              icon: Icons.my_location,
+              label: 'My Location',
+              onPressed: viewModel.centerOnCurrentLocation,
+            ),
+            if (viewModel.destinationLocation != null)
+              _buildMapButton(
+                icon: Icons.clear,
+                label: 'Clear Dest',
+                onPressed: () {
+                  viewModel.clearDestination();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Destination cleared. Location tracking stopped.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                },
+              ),
+            _buildMapButton(
+              icon: _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              label: _isFullScreen ? 'Exit Fullscreen' : 'Fullscreen',
+              onPressed: () => setState(() => _isFullScreen = !_isFullScreen),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  Widget _buildDestinationInfo(MapViewModel viewModel) {
+    final distance = viewModel.getDistanceToDestination();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_on, color: Colors.red, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Destination Set',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                if (distance != null)
+                  Text(
+                    'Distance: $distance',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          if (viewModel.isTrackingLocation)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Tracking',
+                style: TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -650,5 +832,45 @@ class _MapScreenState extends State<MapScreen> {
       default:
         return Colors.grey;
     }
+  }
+
+  void _onMapTap(MapViewModel viewModel, latlong.LatLng point) {
+    _showDestinationDialog(viewModel, point);
+  }
+
+  void _showDestinationDialog(MapViewModel viewModel, latlong.LatLng point) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Set Destination'),
+          content: Text(
+            'Set this location as your destination?\n\n'
+            'Lat: ${point.latitude.toStringAsFixed(6)}\n'
+            'Lng: ${point.longitude.toStringAsFixed(6)}\n\n'
+            'You will be notified when you are within 500 meters.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                viewModel.setDestination(point.latitude, point.longitude);
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Destination set! Location tracking started.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Set Destination'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

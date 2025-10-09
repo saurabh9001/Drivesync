@@ -4,7 +4,7 @@ import '../models/user_profile.dart';
 import '../models/location.dart';
 
 class DemoData {
-  // Maharashtra coordinates - Pune region
+  // Maharashtra coordinates - Pune region5515645508
   static const Location maharashtraCenter = Location(18.5204, 73.8567);
 
   // Demo weather data for different conditions
@@ -260,11 +260,11 @@ class DemoData {
   // Demo user profiles for testing
   static List<Map<String, dynamic>> get demoUserProfiles => [
     {
-      "name": "Rajesh Kumar",
-      "email": "rajesh.kumar@email.com",
+      "name": "Demo User",
+      "email": "demo.user@email.com",
       "phone": "+91 9876543210",
       "emergencyContact": "+91 9876543211",
-      "emergencyContactName": "Priya Kumar",
+      "emergencyContactName": "XYZ",
       "driverExperience": "experienced",
       "vehicleType": "car",
       "enableSoundAlerts": true,
@@ -273,11 +273,11 @@ class DemoData {
       "routePreference": "balanced"
     },
     {
-      "name": "Aarti Sharma",
-      "email": "aarti.sharma@email.com",
+      "name": "User A",
+      "email": "usera@email.com",
       "phone": "+91 9876543212",
       "emergencyContact": "+91 9876543213",
-      "emergencyContactName": "Vikram Sharma",
+      "emergencyContactName": "Emergency Contact A",
       "driverExperience": "beginner",
       "vehicleType": "two_wheeler",
       "enableSoundAlerts": true,
@@ -286,11 +286,11 @@ class DemoData {
       "routePreference": "safest"
     },
     {
-      "name": "Mohammad Ali",
-      "email": "mohammad.ali@email.com",
+      "name": "User B",
+      "email": "userb@email.com",
       "phone": "+91 9876543214",
       "emergencyContact": "+91 9876543215",
-      "emergencyContactName": "Fatima Ali",
+      "emergencyContactName": "Emergency Contact B",
       "driverExperience": "professional",
       "vehicleType": "truck",
       "enableSoundAlerts": true,
